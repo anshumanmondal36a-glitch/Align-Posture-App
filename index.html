@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Align - Posture Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
@@ -19,7 +18,7 @@
 
     <div id="start-screen" class="absolute inset-0 z-[100] bg-gray-900 flex flex-col items-center justify-center backdrop-blur-md">
         <h1 class="text-6xl font-bold mb-4 tracking-tight">Align.</h1>
-        <p class="text-xl text-gray-400 mb-8 max-w-md text-center">Privacy-first posture tracking. We need your permission to send break alerts.</p>
+        <p class="text-xl text-gray-400 mb-8 max-w-md text-center">Privacy-first posture tracking. Keep this tab open, and we'll watch your back.</p>
         <button id="start-btn" class="bg-green-500 hover:bg-green-400 text-gray-900 font-bold py-4 px-10 rounded-full text-xl shadow-[0_0_20px_rgba(34,197,94,0.4)] transition-all transform hover:scale-105">
             Enable Alerts & Start
         </button>
@@ -74,26 +73,48 @@
         let isSlouching = false;
         let slouchTimer = null;
         let audioCtx = null;
+        let trackingActive = false;
 
-        // --- STEP 1: UNLOCK SECURITY ON CLICK ---
+        // --- THE HACK: INLINE WEB WORKER ---
+        // This keeps the app awake even when the tab is hidden!
+        const workerCode = `
+            let interval;
+            self.onmessage = function(e) {
+                if (e.data === 'start') {
+                    // Send a ping every 1 second to check posture
+                    interval = setInterval(() => { self.postMessage('tick'); }, 1000);
+                }
+            };
+        `;
+        const blob = new Blob([workerCode], {type: 'application/javascript'});
+        const backgroundWorker = new Worker(URL.createObjectURL(blob));
+
+        backgroundWorker.onmessage = async () => {
+            // When the worker pings, force the AI to check the camera frame
+            if (trackingActive && videoElement.readyState >= 2) {
+                await pose.send({image: videoElement});
+            }
+        };
+
         startBtn.addEventListener('click', () => {
-            // Hide the start screen
             startScreen.classList.add('hidden');
             
             // Unlock Audio Context
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
-            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
 
-            // Request Native OS Notifications
-            if ("Notification" in window) {
-                Notification.requestPermission();
-            }
+            // Request Native Notifications
+            if ("Notification" in window) Notification.requestPermission();
 
-            // Start the Camera
-            camera.start();
-            statusBadge.innerText = "Analyzing...";
+            // Start Camera Manually
+            navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
+                videoElement.srcObject = stream;
+                trackingActive = true;
+                // Start the background heartbeat
+                backgroundWorker.postMessage('start');
+                statusBadge.innerText = "Analyzing Background...";
+                statusBadge.className = "absolute top-4 left-4 px-4 py-2 rounded-full font-bold text-sm bg-blue-500 text-white shadow-lg transition-colors";
+            });
         });
 
         function playBeep() {
@@ -114,7 +135,6 @@
             mainContainer.classList.remove('slouching');
             alertOverlay.classList.add('hidden');
             customToast.classList.add('translate-x-[150%]');
-            
             statusBadge.innerText = "Perfect Posture";
             statusBadge.className = "absolute top-4 left-4 px-4 py-2 rounded-full font-bold text-sm bg-green-500 text-gray-900 shadow-lg transition-colors";
             clearTimeout(slouchTimer);
@@ -143,17 +163,17 @@
                     if (!slouchTimer) {
                         slouchTimer = setTimeout(() => {
                             isSlouching = true;
-                            // Trigger all alerts!
                             mainContainer.classList.add('slouching');
                             alertOverlay.classList.remove('hidden');
                             customToast.classList.remove('translate-x-[150%]');
                             playBeep();
                             
-                            // Send actual Windows/Mac Notification
+                            // Native OS Notification!
                             if (Notification.permission === "granted") {
                                 new Notification("Align Break Time", { 
                                     body: "Slouching detected! Sit up straight.",
-                                    icon: "https://cdn-icons-png.flaticon.com/512/3048/3048122.png" 
+                                    icon: "https://cdn-icons-png.flaticon.com/512/3048/3048122.png",
+                                    requireInteraction: true // Forces it to stay on screen
                                 });
                             }
                         }, 3000); 
@@ -171,12 +191,6 @@
         const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`});
         pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
         pose.onResults(onResults);
-
-        const camera = new Camera(videoElement, {
-            onFrame: async () => { await pose.send({image: videoElement}); },
-            width: 640, height: 480
-        });
-        // Note: Camera starts ONLY when the button is clicked now!
     </script>
 </body>
 </html>

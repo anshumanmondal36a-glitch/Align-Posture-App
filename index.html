@@ -12,6 +12,8 @@
     <style>
         #main-container { transition: filter 0.5s ease; }
         .slouching { filter: blur(12px); pointer-events: none; }
+        /* Forces the tiny 320x240 canvas to stretch and fill the box nicely */
+        #output_canvas { width: 100%; height: auto; max-height: 480px; object-fit: cover; }
     </style>
 </head>
 <body class="bg-gray-900 text-white font-sans h-screen flex flex-col items-center justify-center overflow-hidden">
@@ -36,9 +38,9 @@
         <h1 class="text-4xl font-bold mb-2 tracking-tight">Align</h1>
         <p class="text-gray-400 mb-6">Real-time privacy-first posture engine</p>
         
-        <div class="relative rounded-2xl overflow-hidden border-4 border-gray-700 shadow-2xl bg-black">
+        <div class="relative w-full max-w-2xl mx-auto rounded-2xl overflow-hidden border-4 border-gray-700 shadow-2xl bg-black flex justify-center">
             <video id="webcam" class="hidden" autoplay playsinline></video>
-            <canvas id="output_canvas" width="640" height="480" class="transform scale-x-[-1]"></canvas>
+            <canvas id="output_canvas" width="320" height="240" class="transform scale-x-[-1]"></canvas>
             
             <div id="status-badge" class="absolute top-4 left-4 px-4 py-2 rounded-full font-bold text-sm bg-gray-500 text-white shadow-lg transition-colors">
                 Waiting for camera...
@@ -74,10 +76,9 @@
         let slouchTimer = null;
         let audioCtx = null;
         let trackingActive = false;
-        
-        // NEW: The Traffic Light Lock
         let isProcessing = false; 
 
+        // The heartbeat is slowed down to 1 tick per second
         const workerCode = `
             let interval;
             self.onmessage = function(e) {
@@ -90,9 +91,8 @@
         const backgroundWorker = new Worker(URL.createObjectURL(blob));
 
         backgroundWorker.onmessage = async () => {
-            // NEW: Only send a frame if the AI is NOT currently busy!
             if (trackingActive && videoElement.readyState >= 2 && !isProcessing) {
-                isProcessing = true; // Turn the light RED
+                isProcessing = true; 
                 await pose.send({image: videoElement});
             }
         };
@@ -105,13 +105,17 @@
 
             if ("Notification" in window) Notification.requestPermission();
 
-            // Lowered resolution requirement for a faster video feed
-            navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } }).then((stream) => {
+            // EXTREME OPTIMIZATION: Asking the webcam for a tiny, low-framerate video
+            navigator.mediaDevices.getUserMedia({ 
+                video: { width: 320, height: 240, frameRate: { max: 10 } } 
+            }).then((stream) => {
                 videoElement.srcObject = stream;
                 trackingActive = true;
                 backgroundWorker.postMessage('start');
                 statusBadge.innerText = "Analyzing Background...";
                 statusBadge.className = "absolute top-4 left-4 px-4 py-2 rounded-full font-bold text-sm bg-blue-500 text-white shadow-lg transition-colors";
+            }).catch(err => {
+                alert("Camera error: Make sure another app isn't using it!");
             });
         });
 
@@ -139,7 +143,6 @@
         }
 
         function onResults(results) {
-            // NEW: The AI is done analyzing. Turn the traffic light GREEN!
             isProcessing = false; 
 
             canvasCtx.save();
@@ -147,8 +150,9 @@
             canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
             if (results.poseLandmarks) {
-                drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 4});
-                drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#FF0000', lineWidth: 2});
+                // Thinner lines so it looks clean on the lower resolution canvas
+                drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
+                drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#FF0000', lineWidth: 1, radius: 2});
 
                 const nose = results.poseLandmarks[0];
                 const leftShoulder = results.poseLandmarks[11];
@@ -190,10 +194,9 @@
 
         const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`});
         
-        // NEW: Changed modelComplexity from 1 to 0. This is the Turbo Mode for speed!
         pose.setOptions({ 
             modelComplexity: 0, 
-            smoothLandmarks: true, 
+            smoothLandmarks: false, // Turned off extra math smoothing
             minDetectionConfidence: 0.5, 
             minTrackingConfidence: 0.5 
         });

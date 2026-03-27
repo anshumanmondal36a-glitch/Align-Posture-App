@@ -11,12 +11,19 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 
     <style>
-        /* Blurs the main dashboard when slouching */
         #main-container { transition: filter 0.5s ease; }
         .slouching { filter: blur(12px); pointer-events: none; }
     </style>
 </head>
 <body class="bg-gray-900 text-white font-sans h-screen flex flex-col items-center justify-center overflow-hidden">
+
+    <div id="start-screen" class="absolute inset-0 z-[100] bg-gray-900 flex flex-col items-center justify-center backdrop-blur-md">
+        <h1 class="text-6xl font-bold mb-4 tracking-tight">Align.</h1>
+        <p class="text-xl text-gray-400 mb-8 max-w-md text-center">Privacy-first posture tracking. We need your permission to send break alerts.</p>
+        <button id="start-btn" class="bg-green-500 hover:bg-green-400 text-gray-900 font-bold py-4 px-10 rounded-full text-xl shadow-[0_0_20px_rgba(34,197,94,0.4)] transition-all transform hover:scale-105">
+            Enable Alerts & Start
+        </button>
+    </div>
 
     <div id="custom-toast" class="fixed top-6 right-6 bg-red-600 border border-red-400 text-white px-6 py-4 rounded-xl shadow-2xl transform translate-x-[150%] transition-transform duration-500 z-[60] flex items-center gap-4">
         <svg class="w-8 h-8 text-white animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
@@ -34,8 +41,8 @@
             <video id="webcam" class="hidden" autoplay playsinline></video>
             <canvas id="output_canvas" width="640" height="480" class="transform scale-x-[-1]"></canvas>
             
-            <div id="status-badge" class="absolute top-4 left-4 px-4 py-2 rounded-full font-bold text-sm bg-green-500 text-gray-900 shadow-lg transition-colors">
-                Perfect Posture
+            <div id="status-badge" class="absolute top-4 left-4 px-4 py-2 rounded-full font-bold text-sm bg-gray-500 text-white shadow-lg transition-colors">
+                Waiting for camera...
             </div>
         </div>
     </div>
@@ -61,36 +68,51 @@
         const mainContainer = document.getElementById('main-container');
         const alertOverlay = document.getElementById('alert-overlay');
         const customToast = document.getElementById('custom-toast');
+        const startBtn = document.getElementById('start-btn');
+        const startScreen = document.getElementById('start-screen');
 
         let isSlouching = false;
         let slouchTimer = null;
+        let audioCtx = null;
 
-        // Generate a clean audio beep
+        // --- STEP 1: UNLOCK SECURITY ON CLICK ---
+        startBtn.addEventListener('click', () => {
+            // Hide the start screen
+            startScreen.classList.add('hidden');
+            
+            // Unlock Audio Context
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            // Request Native OS Notifications
+            if ("Notification" in window) {
+                Notification.requestPermission();
+            }
+
+            // Start the Camera
+            camera.start();
+            statusBadge.innerText = "Analyzing...";
+        });
+
         function playBeep() {
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (!audioCtx) return;
             const oscillator = audioCtx.createOscillator();
             const gainNode = audioCtx.createGain();
-            
             oscillator.type = 'sine';
             oscillator.frequency.setValueAtTime(500, audioCtx.currentTime); 
-            
-            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); // Keep volume reasonable
-            
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); 
             oscillator.connect(gainNode);
             gainNode.connect(audioCtx.destination);
-            
             oscillator.start();
             setTimeout(() => oscillator.stop(), 400); 
         }
 
-        // Reset everything when the user clicks the button
         function resetPosture() {
             isSlouching = false;
-            // Remove blur
             mainContainer.classList.remove('slouching');
-            // Hide the full-screen overlay
             alertOverlay.classList.add('hidden');
-            // Slide the notification back off-screen
             customToast.classList.add('translate-x-[150%]');
             
             statusBadge.innerText = "Perfect Posture";
@@ -98,14 +120,12 @@
             clearTimeout(slouchTimer);
         }
 
-        // AI Logic
         function onResults(results) {
             canvasCtx.save();
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
             canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
             if (results.poseLandmarks) {
-                // Draw the skeleton lines
                 drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 4});
                 drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#FF0000', lineWidth: 2});
 
@@ -114,7 +134,6 @@
                 const rightShoulder = results.poseLandmarks[12];
                 const shoulderY = (leftShoulder.y + rightShoulder.y) / 2;
                 
-                // Measure how far the head drops towards the shoulders
                 const headDropDistance = shoulderY - nose.y;
 
                 if (headDropDistance < 0.15 && !isSlouching) {
@@ -124,14 +143,19 @@
                     if (!slouchTimer) {
                         slouchTimer = setTimeout(() => {
                             isSlouching = true;
-                            // 1. Blur the main app screen
+                            // Trigger all alerts!
                             mainContainer.classList.add('slouching');
-                            // 2. Show the full-screen break overlay
                             alertOverlay.classList.remove('hidden');
-                            // 3. Slide in the custom notification
                             customToast.classList.remove('translate-x-[150%]');
-                            // 4. Play the alert beep
                             playBeep();
+                            
+                            // Send actual Windows/Mac Notification
+                            if (Notification.permission === "granted") {
+                                new Notification("Align Break Time", { 
+                                    body: "Slouching detected! Sit up straight.",
+                                    icon: "https://cdn-icons-png.flaticon.com/512/3048/3048122.png" 
+                                });
+                            }
                         }, 3000); 
                     }
                 } else if (headDropDistance >= 0.15 && !isSlouching) {
@@ -152,7 +176,7 @@
             onFrame: async () => { await pose.send({image: videoElement}); },
             width: 640, height: 480
         });
-        camera.start();
+        // Note: Camera starts ONLY when the button is clicked now!
     </script>
 </body>
 </html>

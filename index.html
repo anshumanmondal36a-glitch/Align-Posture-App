@@ -74,14 +74,14 @@
         let slouchTimer = null;
         let audioCtx = null;
         let trackingActive = false;
+        
+        // NEW: The Traffic Light Lock
+        let isProcessing = false; 
 
-        // --- THE HACK: INLINE WEB WORKER ---
-        // This keeps the app awake even when the tab is hidden!
         const workerCode = `
             let interval;
             self.onmessage = function(e) {
                 if (e.data === 'start') {
-                    // Send a ping every 1 second to check posture
                     interval = setInterval(() => { self.postMessage('tick'); }, 1000);
                 }
             };
@@ -90,8 +90,9 @@
         const backgroundWorker = new Worker(URL.createObjectURL(blob));
 
         backgroundWorker.onmessage = async () => {
-            // When the worker pings, force the AI to check the camera frame
-            if (trackingActive && videoElement.readyState >= 2) {
+            // NEW: Only send a frame if the AI is NOT currently busy!
+            if (trackingActive && videoElement.readyState >= 2 && !isProcessing) {
+                isProcessing = true; // Turn the light RED
                 await pose.send({image: videoElement});
             }
         };
@@ -99,18 +100,15 @@
         startBtn.addEventListener('click', () => {
             startScreen.classList.add('hidden');
             
-            // Unlock Audio Context
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             if (audioCtx.state === 'suspended') audioCtx.resume();
 
-            // Request Native Notifications
             if ("Notification" in window) Notification.requestPermission();
 
-            // Start Camera Manually
-            navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
+            // Lowered resolution requirement for a faster video feed
+            navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } }).then((stream) => {
                 videoElement.srcObject = stream;
                 trackingActive = true;
-                // Start the background heartbeat
                 backgroundWorker.postMessage('start');
                 statusBadge.innerText = "Analyzing Background...";
                 statusBadge.className = "absolute top-4 left-4 px-4 py-2 rounded-full font-bold text-sm bg-blue-500 text-white shadow-lg transition-colors";
@@ -141,6 +139,9 @@
         }
 
         function onResults(results) {
+            // NEW: The AI is done analyzing. Turn the traffic light GREEN!
+            isProcessing = false; 
+
             canvasCtx.save();
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
             canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
@@ -168,12 +169,11 @@
                             customToast.classList.remove('translate-x-[150%]');
                             playBeep();
                             
-                            // Native OS Notification!
                             if (Notification.permission === "granted") {
                                 new Notification("Align Break Time", { 
                                     body: "Slouching detected! Sit up straight.",
                                     icon: "https://cdn-icons-png.flaticon.com/512/3048/3048122.png",
-                                    requireInteraction: true // Forces it to stay on screen
+                                    requireInteraction: true 
                                 });
                             }
                         }, 3000); 
@@ -189,7 +189,14 @@
         }
 
         const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`});
-        pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        
+        // NEW: Changed modelComplexity from 1 to 0. This is the Turbo Mode for speed!
+        pose.setOptions({ 
+            modelComplexity: 0, 
+            smoothLandmarks: true, 
+            minDetectionConfidence: 0.5, 
+            minTrackingConfidence: 0.5 
+        });
         pose.onResults(onResults);
     </script>
 </body>

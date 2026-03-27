@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Align - Posture Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+
+    <style>
+        /* Blurs the main dashboard when slouching */
+        #main-container { transition: filter 0.5s ease; }
+        .slouching { filter: blur(12px); pointer-events: none; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white font-sans h-screen flex flex-col items-center justify-center overflow-hidden">
+
+    <div id="custom-toast" class="fixed top-6 right-6 bg-red-600 border border-red-400 text-white px-6 py-4 rounded-xl shadow-2xl transform translate-x-[150%] transition-transform duration-500 z-[60] flex items-center gap-4">
+        <svg class="w-8 h-8 text-white animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+        <div>
+            <h4 class="font-bold text-lg">Align Alert</h4>
+            <p class="text-sm opacity-90">Slouching detected. Please adjust.</p>
+        </div>
+    </div>
+
+    <div id="main-container" class="relative w-full max-w-4xl p-4 flex flex-col items-center">
+        <h1 class="text-4xl font-bold mb-2 tracking-tight">Align</h1>
+        <p class="text-gray-400 mb-6">Real-time privacy-first posture engine</p>
+        
+        <div class="relative rounded-2xl overflow-hidden border-4 border-gray-700 shadow-2xl bg-black">
+            <video id="webcam" class="hidden" autoplay playsinline></video>
+            <canvas id="output_canvas" width="640" height="480" class="transform scale-x-[-1]"></canvas>
+            
+            <div id="status-badge" class="absolute top-4 left-4 px-4 py-2 rounded-full font-bold text-sm bg-green-500 text-gray-900 shadow-lg transition-colors">
+                Perfect Posture
+            </div>
+        </div>
+    </div>
+
+    <div id="alert-overlay" class="absolute inset-0 flex flex-col items-center justify-center bg-black/80 hidden z-50">
+        <h2 class="text-6xl font-bold text-red-500 mb-4 animate-pulse">Break Time!</h2>
+        <p class="text-2xl text-white mb-8">Let's unlock your workflow.</p>
+        
+        <div class="bg-gray-800 p-8 rounded-2xl text-center max-w-md border border-gray-600 shadow-2xl">
+            <h3 class="text-xl font-bold text-blue-400 mb-2">Mini Desk-Yoga</h3>
+            <p class="text-gray-300 mb-6">Sit up straight, roll your shoulders back, and stretch your neck side-to-side for 15 seconds.</p>
+            <button onclick="resetPosture()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-full transition-all shadow-lg shadow-blue-500/50">
+                I'm Sitting Straight Now
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const videoElement = document.getElementById('webcam');
+        const canvasElement = document.getElementById('output_canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const statusBadge = document.getElementById('status-badge');
+        const mainContainer = document.getElementById('main-container');
+        const alertOverlay = document.getElementById('alert-overlay');
+        const customToast = document.getElementById('custom-toast');
+
+        let isSlouching = false;
+        let slouchTimer = null;
+
+        // Generate a clean audio beep
+        function playBeep() {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(500, audioCtx.currentTime); 
+            
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); // Keep volume reasonable
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            oscillator.start();
+            setTimeout(() => oscillator.stop(), 400); 
+        }
+
+        // Reset everything when the user clicks the button
+        function resetPosture() {
+            isSlouching = false;
+            // Remove blur
+            mainContainer.classList.remove('slouching');
+            // Hide the full-screen overlay
+            alertOverlay.classList.add('hidden');
+            // Slide the notification back off-screen
+            customToast.classList.add('translate-x-[150%]');
+            
+            statusBadge.innerText = "Perfect Posture";
+            statusBadge.className = "absolute top-4 left-4 px-4 py-2 rounded-full font-bold text-sm bg-green-500 text-gray-900 shadow-lg transition-colors";
+            clearTimeout(slouchTimer);
+        }
+
+        // AI Logic
+        function onResults(results) {
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            if (results.poseLandmarks) {
+                // Draw the skeleton lines
+                drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 4});
+                drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#FF0000', lineWidth: 2});
+
+                const nose = results.poseLandmarks[0];
+                const leftShoulder = results.poseLandmarks[11];
+                const rightShoulder = results.poseLandmarks[12];
+                const shoulderY = (leftShoulder.y + rightShoulder.y) / 2;
+                
+                // Measure how far the head drops towards the shoulders
+                const headDropDistance = shoulderY - nose.y;
+
+                if (headDropDistance < 0.15 && !isSlouching) {
+                    statusBadge.innerText = "Warning: Slouching!";
+                    statusBadge.className = "absolute top-4 left-4 px-4 py-2 rounded-full font-bold text-sm bg-yellow-500 text-gray-900 shadow-lg transition-colors";
+                    
+                    if (!slouchTimer) {
+                        slouchTimer = setTimeout(() => {
+                            isSlouching = true;
+                            // 1. Blur the main app screen
+                            mainContainer.classList.add('slouching');
+                            // 2. Show the full-screen break overlay
+                            alertOverlay.classList.remove('hidden');
+                            // 3. Slide in the custom notification
+                            customToast.classList.remove('translate-x-[150%]');
+                            // 4. Play the alert beep
+                            playBeep();
+                        }, 3000); 
+                    }
+                } else if (headDropDistance >= 0.15 && !isSlouching) {
+                    statusBadge.innerText = "Perfect Posture";
+                    statusBadge.className = "absolute top-4 left-4 px-4 py-2 rounded-full font-bold text-sm bg-green-500 text-gray-900 shadow-lg transition-colors";
+                    clearTimeout(slouchTimer);
+                    slouchTimer = null;
+                }
+            }
+            canvasCtx.restore();
+        }
+
+        const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`});
+        pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        pose.onResults(onResults);
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => { await pose.send({image: videoElement}); },
+            width: 640, height: 480
+        });
+        camera.start();
+    </script>
+</body>
+</html>

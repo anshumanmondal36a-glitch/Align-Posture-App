@@ -3,125 +3,1231 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Align - Posture Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
-    
+    <title>Align — Posture Intelligence</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #0f172a; }
-        .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); }
-        .fade-in { animation: fadeIn 0.4s ease-in forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        #app-container { transition: filter 0.3s ease; }
-        .slouching { filter: blur(12px); pointer-events: none; }
+        :root {
+            --ink: #0a0a0f;
+            --ink-2: #13131a;
+            --ink-3: #1c1c28;
+            --surface: #21212f;
+            --surface-2: #2a2a3e;
+            --border: rgba(255,255,255,0.07);
+            --border-bright: rgba(255,255,255,0.14);
+            --text: #f0f0f8;
+            --text-2: #9090b0;
+            --text-3: #5a5a78;
+            --accent: #7c6dfa;
+            --accent-glow: rgba(124, 109, 250, 0.35);
+            --green: #2de8a0;
+            --green-glow: rgba(45, 232, 160, 0.3);
+            --red: #ff5470;
+            --red-glow: rgba(255, 84, 112, 0.3);
+            --amber: #ffb547;
+            --amber-glow: rgba(255, 181, 71, 0.3);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body {
+            height: 100%;
+            background: var(--ink);
+            color: var(--text);
+            font-family: 'DM Sans', sans-serif;
+            overflow: hidden;
+        }
+
+        /* ── VIEWS ─────────────────────────────────────── */
+        .view { display: none; width: 100%; height: 100%; position: absolute; inset: 0; }
+        .view.active { display: flex; }
+
+        /* ── NOISE LAYER ───────────────────────────────── */
+        body::before {
+            content: '';
+            position: fixed; inset: 0; z-index: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+            background-size: 200px 200px;
+            pointer-events: none;
+        }
+
+        /* ── ORB LIGHTS ────────────────────────────────── */
+        .orb {
+            position: fixed; border-radius: 50%; pointer-events: none; filter: blur(80px); opacity: 0.18; z-index: 0;
+        }
+        .orb-1 { width: 600px; height: 600px; background: var(--accent); top: -200px; right: -100px; animation: orbFloat 12s ease-in-out infinite; }
+        .orb-2 { width: 500px; height: 500px; background: var(--green); bottom: -200px; left: -100px; animation: orbFloat 15s ease-in-out infinite reverse; }
+        @keyframes orbFloat {
+            0%,100% { transform: translate(0,0); }
+            50% { transform: translate(30px, -30px); }
+        }
+
+        /* ─────────────────── LOGIN ─────────────────────── */
+        #view-login {
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-shell {
+            position: relative; z-index: 1;
+            width: 420px;
+            background: rgba(21,21,31,0.85);
+            backdrop-filter: blur(32px);
+            border: 1px solid var(--border-bright);
+            border-radius: 28px;
+            padding: 48px 40px;
+            box-shadow: 0 40px 120px rgba(0,0,0,0.6);
+            animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(32px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .logo-mark {
+            font-family: 'Syne', sans-serif;
+            font-size: 42px; font-weight: 800;
+            letter-spacing: -2px;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--green) 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            margin-bottom: 6px;
+        }
+        .logo-sub {
+            font-size: 13px; color: var(--text-3); letter-spacing: 0.08em; text-transform: uppercase;
+            margin-bottom: 40px;
+        }
+
+        .divider { display: flex; align-items: center; gap: 12px; margin: 20px 0; }
+        .divider-line { flex: 1; height: 1px; background: var(--border-bright); }
+        .divider-text { font-size: 12px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.1em; }
+
+        .input-group { margin-bottom: 14px; }
+        .input-field {
+            width: 100%;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px 18px;
+            color: var(--text);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .input-field:focus {
+            border-color: var(--accent);
+            background: rgba(124, 109, 250, 0.07);
+        }
+        .input-field::placeholder { color: var(--text-3); }
+
+        .btn-google {
+            width: 100%;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid var(--border-bright);
+            border-radius: 12px;
+            padding: 13px;
+            color: var(--text);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px; font-weight: 500;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+            transition: background 0.2s, border-color 0.2s;
+            margin-bottom: 20px;
+        }
+        .btn-google:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+
+        .btn-primary {
+            width: 100%;
+            background: linear-gradient(135deg, var(--accent), #6254e8);
+            border: none;
+            border-radius: 12px;
+            padding: 15px;
+            color: #fff;
+            font-family: 'Syne', sans-serif;
+            font-size: 15px; font-weight: 700;
+            letter-spacing: 0.03em;
+            cursor: pointer;
+            margin-top: 6px;
+            transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+            box-shadow: 0 0 30px var(--accent-glow);
+        }
+        .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 4px 40px var(--accent-glow); }
+        .btn-primary:active { transform: translateY(0); }
+
+        .login-footer {
+            text-align: center;
+            margin-top: 24px;
+            font-size: 12px;
+            color: var(--text-3);
+        }
+        .login-footer a { color: var(--accent); text-decoration: none; }
+
+        /* ────────────── PERMISSIONS ───────────────────── */
+        #view-permissions {
+            align-items: center;
+            justify-content: center;
+        }
+
+        .perm-shell {
+            position: relative; z-index: 1;
+            width: 500px;
+            background: rgba(21,21,31,0.9);
+            backdrop-filter: blur(32px);
+            border: 1px solid var(--border-bright);
+            border-radius: 28px;
+            padding: 48px 44px;
+            box-shadow: 0 40px 120px rgba(0,0,0,0.6);
+            animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .perm-title { font-family: 'Syne', sans-serif; font-size: 30px; font-weight: 800; letter-spacing: -1px; margin-bottom: 8px; }
+        .perm-sub { font-size: 14px; color: var(--text-2); margin-bottom: 36px; line-height: 1.6; }
+
+        .perm-item {
+            display: flex; align-items: center; gap: 16px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 18px 20px;
+            margin-bottom: 12px;
+            transition: border-color 0.2s;
+        }
+        .perm-item:hover { border-color: var(--border-bright); }
+        .perm-icon {
+            width: 48px; height: 48px;
+            border-radius: 14px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; flex-shrink: 0;
+        }
+        .perm-icon.blue { background: rgba(124, 109, 250, 0.15); }
+        .perm-icon.green { background: rgba(45, 232, 160, 0.12); }
+        .perm-info h4 { font-weight: 600; font-size: 15px; margin-bottom: 3px; }
+        .perm-info p { font-size: 12px; color: var(--text-3); }
+        .perm-badge {
+            margin-left: auto; flex-shrink: 0;
+            font-size: 11px; font-weight: 700; letter-spacing: 0.07em;
+            padding: 4px 10px; border-radius: 20px;
+            background: rgba(45, 232, 160, 0.12);
+            color: var(--green);
+            border: 1px solid rgba(45, 232, 160, 0.25);
+            text-transform: uppercase;
+        }
+
+        .btn-launch {
+            width: 100%;
+            background: linear-gradient(135deg, var(--green) 0%, #22c77a 100%);
+            border: none;
+            border-radius: 14px;
+            padding: 18px;
+            color: #0a1a12;
+            font-family: 'Syne', sans-serif;
+            font-size: 16px; font-weight: 800;
+            letter-spacing: 0.03em;
+            cursor: pointer;
+            margin-top: 28px;
+            transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+            box-shadow: 0 0 40px var(--green-glow);
+        }
+        .btn-launch:hover { opacity: 0.92; transform: translateY(-1px); box-shadow: 0 6px 50px var(--green-glow); }
+
+        /* ────────────── MAIN APP ───────────────────────── */
+        #view-app {
+            flex-direction: column;
+        }
+
+        /* ── TOPBAR ── */
+        .topbar {
+            position: relative; z-index: 10;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 28px;
+            height: 68px;
+            background: rgba(13,13,20,0.8);
+            backdrop-filter: blur(24px);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .topbar-logo { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; letter-spacing: -1px; }
+        .topbar-logo span { color: var(--accent); }
+        .topbar-center {
+            display: flex; gap: 8px;
+        }
+        .nav-pill {
+            padding: 7px 16px;
+            border-radius: 20px;
+            font-size: 13px; font-weight: 500;
+            cursor: pointer;
+            border: 1px solid transparent;
+            color: var(--text-2);
+            background: none;
+            font-family: 'DM Sans', sans-serif;
+            transition: all 0.2s;
+        }
+        .nav-pill.active, .nav-pill:hover {
+            background: rgba(124, 109, 250, 0.12);
+            border-color: rgba(124, 109, 250, 0.3);
+            color: var(--text);
+        }
+        .topbar-right { display: flex; align-items: center; gap: 16px; }
+        .session-chip {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 8px 14px;
+            font-size: 12px;
+            color: var(--text-2);
+        }
+        .session-chip strong { font-family: 'JetBrains Mono', monospace; color: var(--text); font-size: 13px; }
+        .avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--green)); border: 2px solid var(--border-bright); cursor: pointer; }
+        .notif-btn {
+            width: 36px; height: 36px; border-radius: 50%;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; position: relative; transition: background 0.2s;
+        }
+        .notif-btn:hover { background: rgba(255,255,255,0.1); }
+        .notif-dot {
+            position: absolute; top: 8px; right: 8px;
+            width: 7px; height: 7px; border-radius: 50%;
+            background: var(--red); border: 1.5px solid var(--ink);
+        }
+
+        /* ── MAIN LAYOUT ── */
+        .app-body {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 0;
+            overflow: hidden;
+            position: relative; z-index: 1;
+        }
+
+        /* ── LEFT: CAMERA SECTION ── */
+        .camera-section {
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow: hidden;
+        }
+
+        .camera-wrapper {
+            position: relative;
+            flex: 1;
+            background: #080810;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        #webcam { display: none; }
+        #output_canvas {
+            width: 100%; height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+            display: block;
+        }
+
+        .camera-overlay-tl {
+            position: absolute; top: 0; left: 0; right: 0;
+            padding: 18px 20px;
+            display: flex; align-items: center; justify-content: space-between;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.6), transparent);
+        }
+
+        #status-badge {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 16px;
+            border-radius: 30px;
+            background: rgba(13,13,20,0.85);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border-bright);
+            font-size: 13px; font-weight: 600;
+            transition: all 0.4s;
+        }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .status-dot.yellow { background: var(--amber); box-shadow: 0 0 8px var(--amber-glow); animation: pulse 1.5s infinite; }
+        .status-dot.green { background: var(--green); box-shadow: 0 0 8px var(--green-glow); }
+        .status-dot.red { background: var(--red); box-shadow: 0 0 8px var(--red-glow); animation: pulse 0.8s infinite; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+        .rec-chip {
+            display: flex; align-items: center; gap: 6px;
+            padding: 6px 12px;
+            border-radius: 30px;
+            background: rgba(255, 84, 112, 0.15);
+            border: 1px solid rgba(255, 84, 112, 0.3);
+            font-size: 12px; font-weight: 600;
+            color: var(--red);
+        }
+        .rec-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); animation: pulse 1s infinite; }
+
+        .camera-overlay-bl {
+            position: absolute; bottom: 0; left: 0; right: 0;
+            padding: 14px 20px;
+            background: linear-gradient(to top, rgba(0,0,0,0.6), transparent);
+            display: flex; align-items: flex-end; justify-content: space-between;
+        }
+
+        .score-ring-sm {
+            width: 60px; height: 60px; position: relative;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .score-ring-sm svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+        .score-ring-sm .score-val { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 500; position: relative; z-index: 1; }
+
+        .camera-metrics {
+            display: flex; gap: 10px;
+        }
+        .mini-metric {
+            background: rgba(13,13,20,0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-bright);
+            border-radius: 10px;
+            padding: 8px 12px;
+            text-align: center;
+        }
+        .mini-metric-val { font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 500; }
+        .mini-metric-label { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.07em; margin-top: 2px; }
+
+        /* ── BOTTOM STATS ROW ── */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+            flex-shrink: 0;
+        }
+
+        .stat-card {
+            background: rgba(21,21,31,0.6);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 18px 20px;
+            display: flex; flex-direction: column; gap: 8px;
+            transition: border-color 0.2s, transform 0.2s;
+            cursor: default;
+        }
+        .stat-card:hover { border-color: var(--border-bright); transform: translateY(-2px); }
+        .stat-label {
+            font-size: 11px; color: var(--text-3);
+            text-transform: uppercase; letter-spacing: 0.1em;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .stat-label-dot { width: 5px; height: 5px; border-radius: 50%; }
+        .stat-value {
+            font-family: 'Syne', sans-serif;
+            font-size: 28px; font-weight: 700;
+            letter-spacing: -1px;
+        }
+        .stat-sub { font-size: 12px; color: var(--text-3); }
+        .stat-bar { height: 3px; background: var(--border); border-radius: 3px; margin-top: 4px; overflow: hidden; }
+        .stat-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+
+        /* ── RIGHT PANEL ── */
+        .right-panel {
+            border-left: 1px solid var(--border);
+            display: flex; flex-direction: column;
+            overflow: hidden;
+            background: rgba(13,13,20,0.5);
+        }
+
+        .panel-section {
+            padding: 20px 20px 0;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 20px;
+        }
+        .panel-heading {
+            font-family: 'Syne', sans-serif;
+            font-size: 14px; font-weight: 700;
+            letter-spacing: 0.05em; text-transform: uppercase;
+            color: var(--text-3);
+            margin-bottom: 14px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .panel-heading-badge {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 11px; font-weight: 500;
+            background: rgba(124, 109, 250, 0.15);
+            color: var(--accent);
+            padding: 3px 8px; border-radius: 20px;
+            letter-spacing: 0;
+            text-transform: none;
+        }
+
+        /* Score Ring */
+        .score-display {
+            display: flex; align-items: center; gap: 18px;
+        }
+        .score-ring {
+            position: relative; width: 80px; height: 80px;
+            flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .score-ring svg { position: absolute; width: 100%; height: 100%; transform: rotate(-90deg); }
+        .score-ring-num {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 22px; font-weight: 500;
+            position: relative; z-index: 1;
+        }
+        .score-info h3 { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 4px; }
+        .score-info p { font-size: 12px; color: var(--text-2); line-height: 1.5; }
+
+        /* Spine gauge */
+        .spine-gauge-wrap {
+            display: flex; gap: 12px; align-items: center;
+        }
+        .spine-gauge {
+            flex: 1; height: 8px; background: var(--surface-2); border-radius: 8px; overflow: hidden;
+        }
+        .spine-gauge-fill {
+            height: 100%; border-radius: 8px; transition: width 0.5s, background 0.5s;
+        }
+        .spine-label { font-size: 12px; color: var(--text-2); width: 36px; text-align: right; font-family: 'JetBrains Mono', monospace; }
+
+        /* Alerts feed */
+        .alerts-feed { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 8px; }
+        .alerts-feed::-webkit-scrollbar { width: 4px; }
+        .alerts-feed::-webkit-scrollbar-track { background: transparent; }
+        .alerts-feed::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 4px; }
+
+        .alert-item {
+            display: flex; gap: 12px;
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.02);
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }
+        .alert-icon { font-size: 18px; flex-shrink: 0; margin-top: 2px; }
+        .alert-text h5 { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+        .alert-text p { font-size: 12px; color: var(--text-2); line-height: 1.4; }
+        .alert-time { font-size: 11px; color: var(--text-3); font-family: 'JetBrains Mono', monospace; margin-top: 4px; }
+        .alert-item.warn { border-color: rgba(255, 181, 71, 0.2); background: rgba(255, 181, 71, 0.04); }
+        .alert-item.bad { border-color: rgba(255, 84, 112, 0.2); background: rgba(255, 84, 112, 0.04); }
+        .alert-item.good { border-color: rgba(45, 232, 160, 0.2); background: rgba(45, 232, 160, 0.04); }
+
+        /* Heatmap (simulated) */
+        .heatmap {
+            display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; margin-top: 4px;
+        }
+        .hm-cell {
+            aspect-ratio: 1; border-radius: 2px;
+        }
+
+        /* ── BREAK OVERLAY ── */
+        #break-overlay {
+            display: none;
+            position: fixed; inset: 0; z-index: 200;
+            background: rgba(0,0,0,0.88);
+            backdrop-filter: blur(20px);
+            flex-direction: column;
+            align-items: center; justify-content: center;
+            animation: fadeOverlay 0.3s ease;
+        }
+        #break-overlay.active { display: flex; }
+        @keyframes fadeOverlay { from { opacity: 0; } to { opacity: 1; } }
+        .break-content {
+            text-align: center; max-width: 420px;
+        }
+        .break-emoji { font-size: 72px; margin-bottom: 24px; animation: breathe 4s ease-in-out infinite; }
+        @keyframes breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+        .break-title { font-family: 'Syne', sans-serif; font-size: 48px; font-weight: 800; letter-spacing: -2px; color: var(--red); margin-bottom: 12px; }
+        .break-sub { font-size: 16px; color: var(--text-2); margin-bottom: 40px; line-height: 1.6; }
+        .break-card {
+            background: rgba(21,21,31,0.9);
+            border: 1px solid var(--border-bright);
+            border-radius: 24px;
+            padding: 36px;
+        }
+        .break-timer-ring {
+            width: 120px; height: 120px;
+            margin: 0 auto 24px;
+            position: relative;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .break-timer-ring svg { position: absolute; width: 100%; height: 100%; transform: rotate(-90deg); }
+        .break-timer-num {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 32px; font-weight: 500;
+            position: relative; z-index: 1;
+        }
+        .stretch-list { text-align: left; margin-bottom: 28px; }
+        .stretch-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: background 0.2s;
+            margin-bottom: 4px;
+        }
+        .stretch-item.done { color: var(--green); }
+        .stretch-item.done::before { content: '✓'; margin-right: 4px; }
+        .btn-dismiss {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid var(--border-bright);
+            color: var(--text);
+            border-radius: 12px;
+            padding: 14px 32px;
+            font-family: 'Syne', sans-serif;
+            font-size: 14px; font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-dismiss:hover { background: rgba(255,255,255,0.12); }
+
+        /* ── TOAST ── */
+        #toast {
+            position: fixed; top: 80px; right: 24px; z-index: 100;
+            background: rgba(21,21,31,0.95);
+            border: 1px solid rgba(255, 84, 112, 0.4);
+            border-radius: 16px;
+            padding: 16px 20px;
+            display: flex; align-items: center; gap: 14px;
+            box-shadow: 0 8px 40px rgba(255, 84, 112, 0.2);
+            backdrop-filter: blur(24px);
+            transform: translateX(120%);
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            max-width: 300px;
+        }
+        #toast.show { transform: translateX(0); }
+        .toast-icon { font-size: 24px; flex-shrink: 0; }
+        .toast-body h5 { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+        .toast-body p { font-size: 12px; color: var(--text-2); }
+
+        /* ── BLUR EFFECT ── */
+        #app-content-blur {
+            transition: filter 0.4s ease;
+        }
+        #app-content-blur.slouching {
+            filter: blur(8px);
+            pointer-events: none;
+        }
+
+        /* ── CHEVRON ── */
+        .screen-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
     </style>
 </head>
-<body class="text-white h-screen w-screen overflow-hidden flex items-center justify-center bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]">
+<body>
 
-    <div id="view-login" class="w-full max-w-md p-8 glass-panel rounded-3xl shadow-2xl fade-in z-10">
-        <div class="text-center mb-8">
-            <h1 class="text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 mb-2 tracking-tight">Align.</h1>
-            <p class="text-gray-400 text-sm">Unlock your workflow.</p>
-        </div>
+<!-- Background -->
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
 
-        <button onclick="handleLogin()" class="w-full flex items-center justify-center gap-3 bg-white text-gray-900 font-semibold py-3 px-4 rounded-xl hover:bg-gray-100 transition-all mb-4 shadow-lg">
-            <svg class="w-5 h-5" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+<!-- ═══════════════════ LOGIN ═══════════════════ -->
+<div id="view-login" class="view active">
+    <div class="login-shell">
+        <div class="logo-mark">Align.</div>
+        <div class="logo-sub">Posture Intelligence Platform</div>
+
+        <button class="btn-google" onclick="handleLogin()">
+            <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
             Continue with Google
         </button>
 
-        <div class="flex items-center my-6">
-            <div class="flex-grow border-t border-gray-600"></div>
-            <span class="px-3 text-gray-500 text-sm">or</span>
-            <div class="flex-grow border-t border-gray-600"></div>
+        <div class="divider">
+            <div class="divider-line"></div>
+            <span class="divider-text">or</span>
+            <div class="divider-line"></div>
         </div>
 
-        <div class="space-y-4">
-            <input type="email" placeholder="Email Address" class="w-full bg-gray-800/50 border border-gray-600 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors">
-            <input type="password" placeholder="Password" class="w-full bg-gray-800/50 border border-gray-600 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors">
-            <button onclick="handleLogin()" class="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold py-3 px-4 rounded-xl shadow-[0_0_15px_rgba(37,99,235,0.4)] transition-all">
-                Sign In
-            </button>
+        <div class="input-group">
+            <input class="input-field" type="email" placeholder="Email address">
+        </div>
+        <div class="input-group">
+            <input class="input-field" type="password" placeholder="Password">
+        </div>
+        <button class="btn-primary" onclick="handleLogin()">Sign In</button>
+
+        <div class="login-footer">
+            Don't have an account? <a href="#">Sign up free</a> · <a href="#">Forgot password?</a>
         </div>
     </div>
+</div>
 
-    <div id="view-permissions" class="w-full max-w-lg p-8 glass-panel rounded-3xl shadow-2xl hidden fade-in z-10">
-        <h2 class="text-3xl font-bold mb-2">Welcome aboard.</h2>
-        <p class="text-gray-400 mb-8 text-sm">To provide a seamless zero-lag experience, Align needs a few permissions.</p>
+<!-- ═══════════════════ PERMISSIONS ═══════════════════ -->
+<div id="view-permissions" class="view" style="align-items:center;justify-content:center;">
+    <div class="perm-shell">
+        <div class="perm-title">Welcome aboard.</div>
+        <p class="perm-sub">Align needs a couple of permissions to monitor your posture locally — nothing ever leaves your device.</p>
 
-        <div class="space-y-4 mb-8">
-            <div class="flex items-center justify-between p-4 bg-gray-800/40 rounded-xl border border-gray-700">
-                <div class="flex items-center gap-3">
-                    <div class="p-2 bg-blue-500/20 rounded-lg text-blue-400">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-                    </div>
-                    <div>
-                        <h4 class="font-semibold">Camera Access</h4>
-                        <p class="text-xs text-gray-400">Processed locally. Never recorded.</p>
-                    </div>
-                </div>
-                <div class="text-green-400 text-sm font-bold">Required</div>
+        <div class="perm-item">
+            <div class="perm-icon blue">🎥</div>
+            <div class="perm-info">
+                <h4>Camera Access</h4>
+                <p>Pose estimation runs entirely in-browser via MediaPipe. Zero data transmitted.</p>
             </div>
-
-            <div class="flex items-center justify-between p-4 bg-gray-800/40 rounded-xl border border-gray-700">
-                <div class="flex items-center gap-3">
-                    <div class="p-2 bg-emerald-500/20 rounded-lg text-emerald-400">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
-                    </div>
-                    <div>
-                        <h4 class="font-semibold">Desktop Alerts</h4>
-                        <p class="text-xs text-gray-400">To remind you to stretch.</p>
-                    </div>
-                </div>
-                <div class="text-green-400 text-sm font-bold">Required</div>
-            </div>
+            <div class="perm-badge">Required</div>
         </div>
 
-        <button onclick="grantPermissionsAndStart()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 px-4 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all">
-            Grant Access & Launch Dashboard
+        <div class="perm-item">
+            <div class="perm-icon green">🔔</div>
+            <div class="perm-info">
+                <h4>Desktop Notifications</h4>
+                <p>Gentle reminders when slouching is detected or it's time to stretch.</p>
+            </div>
+            <div class="perm-badge">Required</div>
+        </div>
+
+        <div class="perm-item">
+            <div class="perm-icon blue" style="background:rgba(255,181,71,0.12);">📊</div>
+            <div class="perm-info">
+                <h4>Local Storage</h4>
+                <p>Your posture history saved locally for weekly trend analysis.</p>
+            </div>
+            <div class="perm-badge" style="background:rgba(255,181,71,0.12);color:var(--amber);border-color:rgba(255,181,71,0.25);">Optional</div>
+        </div>
+
+        <button class="btn-launch" onclick="grantPermissionsAndStart()">
+            Grant Access & Launch Dashboard →
         </button>
     </div>
+</div>
 
-    <div id="view-app" class="w-full h-full p-6 hidden fade-in z-10 flex flex-col items-center">
-        <div class="w-full max-w-5xl flex justify-between items-center mb-6 glass-panel px-6 py-4 rounded-2xl">
-            <h1 class="text-2xl font-bold tracking-tight">Align<span class="text-blue-500">.</span></h1>
-            <div class="flex items-center gap-4">
-                <div class="text-sm text-gray-400 text-right">
-                    <p>Session Time</p>
-                    <p class="font-mono text-white" id="session-timer">00:00</p>
-                </div>
-                <div class="w-10 h-10 bg-gradient-to-tr from-blue-500 to-emerald-500 rounded-full border-2 border-white/20"></div>
-            </div>
+<!-- ═══════════════════ MAIN APP ═══════════════════ -->
+<div id="view-app" class="view" style="flex-direction:column;">
+    <!-- Topbar -->
+    <div class="topbar">
+        <div class="topbar-logo">Align<span>.</span></div>
+        <div class="topbar-center">
+            <button class="nav-pill active">Live Monitor</button>
+            <button class="nav-pill">History</button>
+            <button class="nav-pill">Exercises</button>
+            <button class="nav-pill">Settings</button>
         </div>
-
-        <div id="app-container" class="relative w-full max-w-5xl flex-grow glass-panel rounded-3xl overflow-hidden border border-gray-700 shadow-2xl flex items-center justify-center p-4">
-            <div class="relative w-full max-w-3xl rounded-2xl overflow-hidden shadow-2xl bg-black aspect-video flex items-center justify-center border border-gray-600">
-                <video id="webcam" class="hidden" autoplay playsinline></video>
-                <canvas id="output_canvas" class="w-full h-full object-cover transform scale-x-[-1]"></canvas>
-                
-                <div id="status-badge" class="absolute top-6 left-6 px-5 py-2 rounded-full font-bold text-sm bg-gray-800/80 text-white backdrop-blur border border-gray-600 transition-all shadow-lg flex items-center gap-2">
-                    <span class="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span>
-                    Initializing Engine...
-                </div>
+        <div class="topbar-right">
+            <div class="session-chip">Session: <strong id="session-timer">00:00</strong></div>
+            <div class="notif-btn">
+                🔔
+                <div class="notif-dot" id="notif-dot" style="display:none;"></div>
             </div>
+            <div class="avatar"></div>
         </div>
     </div>
 
-    <div id="custom-toast" class="fixed top-6 right-6 bg-red-500/90 backdrop-blur border border-red-400 text-white px-6 py-4 rounded-xl shadow-2xl transform translate-x-[150%] transition-transform duration-500 z-[60] flex items-center gap-4">
-        <svg class="w-8 h-8 text-white animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-        <div>
-            <h4 class="font-bold text-lg">Posture Alert</h4>
-            <p class="text-sm opacity-90">Please adjust your seating.</p>
+    <!-- Body -->
+    <div class="screen-wrapper">
+        <div id="app-content-blur" style="flex:1;display:flex;overflow:hidden;">
+            <div class="app-body">
+
+                <!-- LEFT: Camera + Stats -->
+                <div class="camera-section">
+                    <div class="camera-wrapper">
+                        <video id="webcam" autoplay playsinline></video>
+                        <canvas id="output_canvas"></canvas>
+
+                        <div class="camera-overlay-tl">
+                            <div id="status-badge">
+                                <div class="status-dot yellow" id="status-dot"></div>
+                                <span id="status-text">Initializing Engine…</span>
+                            </div>
+                            <div class="rec-chip">
+                                <div class="rec-dot"></div>
+                                Live
+                            </div>
+                        </div>
+
+                        <div class="camera-overlay-bl">
+                            <div class="camera-metrics">
+                                <div class="mini-metric">
+                                    <div class="mini-metric-val" id="spine-angle-disp">—°</div>
+                                    <div class="mini-metric-label">Spine</div>
+                                </div>
+                                <div class="mini-metric">
+                                    <div class="mini-metric-val" id="shoulder-disp">—°</div>
+                                    <div class="mini-metric-label">Shoulder</div>
+                                </div>
+                                <div class="mini-metric">
+                                    <div class="mini-metric-val" id="neck-disp">—°</div>
+                                    <div class="mini-metric-label">Neck</div>
+                                </div>
+                            </div>
+
+                            <div class="score-ring-sm">
+                                <svg viewBox="0 0 60 60">
+                                    <circle cx="30" cy="30" r="24" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="4"/>
+                                    <circle id="score-ring-small" cx="30" cy="30" r="24" fill="none" stroke="var(--green)" stroke-width="4" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="150.8"/>
+                                </svg>
+                                <span class="score-val" id="score-sm">—</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Stats Row -->
+                    <div class="stats-row">
+                        <div class="stat-card">
+                            <div class="stat-label"><div class="stat-label-dot" style="background:var(--green)"></div>Posture Score</div>
+                            <div class="stat-value" id="stat-score" style="color:var(--green)">—</div>
+                            <div class="stat-sub">Out of 100</div>
+                            <div class="stat-bar"><div class="stat-bar-fill" id="stat-score-bar" style="width:0%;background:var(--green)"></div></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label"><div class="stat-label-dot" style="background:var(--accent)"></div>Good Posture</div>
+                            <div class="stat-value" id="stat-good" style="color:var(--accent)">0%</div>
+                            <div class="stat-sub" id="stat-good-sub">Of session</div>
+                            <div class="stat-bar"><div class="stat-bar-fill" id="stat-good-bar" style="width:0%;background:var(--accent)"></div></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label"><div class="stat-label-dot" style="background:var(--amber)"></div>Alerts Sent</div>
+                            <div class="stat-value" id="stat-alerts" style="color:var(--amber)">0</div>
+                            <div class="stat-sub">This session</div>
+                            <div class="stat-bar"><div class="stat-bar-fill" id="stat-alerts-bar" style="width:0%;background:var(--amber)"></div></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label"><div class="stat-label-dot" style="background:var(--red)"></div>Slouch Events</div>
+                            <div class="stat-value" id="stat-slouch" style="color:var(--red)">0</div>
+                            <div class="stat-sub">Detected</div>
+                            <div class="stat-bar"><div class="stat-bar-fill" id="stat-slouch-bar" style="width:0%;background:var(--red)"></div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RIGHT: Panel -->
+                <div class="right-panel">
+                    <!-- Score -->
+                    <div class="panel-section">
+                        <div class="panel-heading">Posture Score <span class="panel-heading-badge" id="score-trend">—</span></div>
+                        <div class="score-display">
+                            <div class="score-ring">
+                                <svg viewBox="0 0 80 80">
+                                    <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="5"/>
+                                    <circle id="score-ring-main" cx="40" cy="40" r="32" fill="none" stroke="var(--green)" stroke-width="5" stroke-linecap="round" stroke-dasharray="201" stroke-dashoffset="201"/>
+                                </svg>
+                                <span class="score-ring-num" id="score-main">—</span>
+                            </div>
+                            <div class="score-info">
+                                <h3 id="score-label">Waiting…</h3>
+                                <p id="score-desc" style="font-size:12px;color:var(--text-2);line-height:1.5">Position yourself in front of the camera to begin posture tracking.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Spine Alignment -->
+                    <div class="panel-section">
+                        <div class="panel-heading">Spine Alignment</div>
+                        <div style="display:flex;flex-direction:column;gap:10px;">
+                            <div>
+                                <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px;">
+                                    <span style="color:var(--text-2)">Cervical</span>
+                                    <span class="spine-label" id="sp-cerv">—</span>
+                                </div>
+                                <div class="spine-gauge"><div class="spine-gauge-fill" id="sp-cerv-bar" style="width:0%;background:var(--green)"></div></div>
+                            </div>
+                            <div>
+                                <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px;">
+                                    <span style="color:var(--text-2)">Thoracic</span>
+                                    <span class="spine-label" id="sp-thor">—</span>
+                                </div>
+                                <div class="spine-gauge"><div class="spine-gauge-fill" id="sp-thor-bar" style="width:0%;background:var(--green)"></div></div>
+                            </div>
+                            <div>
+                                <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px;">
+                                    <span style="color:var(--text-2)">Lumbar</span>
+                                    <span class="spine-label" id="sp-lumb">—</span>
+                                </div>
+                                <div class="spine-gauge"><div class="spine-gauge-fill" id="sp-lumb-bar" style="width:0%;background:var(--amber)"></div></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Today's Heatmap -->
+                    <div class="panel-section">
+                        <div class="panel-heading">Today's Activity <span class="panel-heading-badge">24h</span></div>
+                        <div class="heatmap" id="heatmap"></div>
+                        <div style="display:flex;justify-content:space-between;margin-top:8px;">
+                            <span style="font-size:11px;color:var(--text-3)">12 AM</span>
+                            <span style="font-size:11px;color:var(--text-3)">Now</span>
+                        </div>
+                    </div>
+
+                    <!-- Activity Feed -->
+                    <div class="panel-heading" style="padding:16px 20px 0;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-3);display:flex;align-items:center;justify-content:space-between;">
+                        Activity Feed
+                        <span class="panel-heading-badge">Live</span>
+                    </div>
+                    <div class="alerts-feed" id="alerts-feed">
+                        <div class="alert-item good">
+                            <div class="alert-icon">🚀</div>
+                            <div class="alert-text">
+                                <h5>Session Started</h5>
+                                <p>Align is now monitoring your posture in real-time.</p>
+                                <div class="alert-time">Just now</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
         </div>
     </div>
+</div>
 
-    <div id="alert-overlay" class="absolute inset-0 flex flex-col items-center justify-center bg-black/80 hidden z-[70] backdrop-blur-sm">
-        <h2 class="text-6xl font-bold text-red-500 mb-4 tracking-tight">Break Time.</h2>
-        <p class="text-xl text-gray-300 mb-8">Your posture engine detected strain.</p>
-        
-        <div class="glass-panel p-8 rounded-3xl text-center max-w-md border border-gray-600 shadow-2xl">
-            <div class="w-
+<!-- ═══════════════════ BREAK OVERLAY ═══════════════════ -->
+<div id="break-overlay">
+    <div class="break-content">
+        <div class="break-emoji">🧘</div>
+        <div class="break-title">Break Time.</div>
+        <p class="break-sub">You've been slouching for too long.<br>Let's reset before you continue.</p>
+
+        <div class="break-card">
+            <div class="break-timer-ring">
+                <svg viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="6"/>
+                    <circle id="break-ring" cx="60" cy="60" r="50" fill="none" stroke="var(--red)" stroke-width="6" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="0"/>
+                </svg>
+                <span class="break-timer-num" id="break-timer">30</span>
+            </div>
+
+            <div class="stretch-list">
+                <div class="stretch-item" id="str-1">🔄 Neck rolls — 10 seconds</div>
+                <div class="stretch-item" id="str-2">🤷 Shoulder shrugs — 8 reps</div>
+                <div class="stretch-item" id="str-3">🙆 Back extension — hold 15s</div>
+            </div>
+
+            <button class="btn-dismiss" onclick="dismissBreak()">Resume Session</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════ TOAST ═══════════════════ -->
+<div id="toast">
+    <div class="toast-icon">⚠️</div>
+    <div class="toast-body">
+        <h5 id="toast-title">Posture Alert</h5>
+        <p id="toast-msg">Please sit up straight.</p>
+    </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+//  NAV
+// ─────────────────────────────────────────────
+const views = { login: 'view-login', perms: 'view-permissions', app: 'view-app' };
+function showView(id) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+}
+
+function handleLogin() { showView(views.perms); }
+
+function grantPermissionsAndStart() {
+    if (Notification.permission === 'default') Notification.requestPermission();
+    showView(views.app);
+    startSession();
+    initPose();
+}
+
+// ─────────────────────────────────────────────
+//  SESSION TIMER
+// ─────────────────────────────────────────────
+let sessionSec = 0;
+function startSession() {
+    setInterval(() => {
+        sessionSec++;
+        const m = String(Math.floor(sessionSec/60)).padStart(2,'0');
+        const s = String(sessionSec%60).padStart(2,'0');
+        document.getElementById('session-timer').textContent = m+':'+s;
+    }, 1000);
+}
+
+// ─────────────────────────────────────────────
+//  HEATMAP INIT
+// ─────────────────────────────────────────────
+function initHeatmap() {
+    const hm = document.getElementById('heatmap');
+    const hr = new Date().getHours();
+    for (let i = 0; i < 24; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'hm-cell';
+        cell.id = 'hm-' + i;
+        if (i < hr) {
+            const v = Math.random();
+            cell.style.background = v > 0.6 ? `rgba(45,232,160,${0.3+v*0.5})` : v > 0.3 ? `rgba(255,181,71,${0.2+v*0.4})` : `rgba(255,84,112,${0.2+v*0.5})`;
+        } else {
+            cell.style.background = 'var(--surface-2)';
+        }
+        hm.appendChild(cell);
+    }
+}
+initHeatmap();
+
+// ─────────────────────────────────────────────
+//  POSE / MEDIAPIPE
+// ─────────────────────────────────────────────
+let pose, camera;
+let postureScore = 0;
+let slouchCount = 0;
+let alertCount = 0;
+let goodFrames = 0, totalFrames = 0;
+let lastAlertTime = 0;
+let slouchStreak = 0;
+let breakActive = false;
+
+function calcAngle(a, b, c) {
+    const ab = { x: b.x - a.x, y: b.y - a.y };
+    const cb = { x: b.x - c.x, y: b.y - c.y };
+    const dot = ab.x*cb.x + ab.y*cb.y;
+    const cross = Math.abs(ab.x*cb.y - ab.y*cb.x);
+    return Math.atan2(cross, dot) * (180/Math.PI);
+}
+
+function calcSlope(a, b) {
+    return Math.abs(Math.atan2(Math.abs(b.y - a.y), Math.abs(b.x - a.x)) * (180/Math.PI));
+}
+
+function onResults(results) {
+    const canvas = document.getElementById('output_canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = results.image.width;
+    canvas.height = results.image.height;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.scale(-1, 1);
+    ctx.translate(-canvas.width, 0);
+    ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+    ctx.restore();
+
+    if (!results.poseLandmarks) return;
+    const lm = results.poseLandmarks;
+
+    // Draw skeleton
+    const connColor = postureScore > 70 ? 'rgba(45,232,160,0.7)' : postureScore > 45 ? 'rgba(255,181,71,0.7)' : 'rgba(255,84,112,0.7)';
+    drawConnectors(ctx, lm, POSE_CONNECTIONS, { color: connColor, lineWidth: 2, visibilityMin: 0.3 });
+    ctx.save();
+    ctx.scale(-1, 1);
+    ctx.translate(-canvas.width, 0);
+    drawLandmarks(ctx, lm, { color: 'rgba(255,255,255,0.8)', lineWidth: 1, radius: 3, visibilityMin: 0.3 });
+    ctx.restore();
+
+    // Key landmarks
+    const nose       = lm[0];
+    const lShoulder  = lm[11];
+    const rShoulder  = lm[12];
+    const lHip       = lm[23];
+    const rHip       = lm[24];
+    const lEar       = lm[7];
+    const rEar       = lm[8];
+
+    if (!lShoulder || !rShoulder || !lHip || !rHip) return;
+
+    const midShoulder = { x: (lShoulder.x+rShoulder.x)/2, y: (lShoulder.y+rShoulder.y)/2 };
+    const midHip      = { x: (lHip.x+rHip.x)/2, y: (lHip.y+rHip.y)/2 };
+    const midEar      = { x: (lEar.x+rEar.x)/2, y: (lEar.y+rEar.y)/2 };
+
+    // Angles
+    const spineAngle     = calcAngle(midEar, midShoulder, midHip);
+    const shoulderSlope  = calcSlope(lShoulder, rShoulder);
+    const neckAngle      = calcAngle(midEar, midShoulder, { x: midShoulder.x, y: midShoulder.y - 0.3 });
+
+    // Score
+    let score = 100;
+    if (spineAngle < 155) score -= (155 - spineAngle) * 1.5;
+    if (shoulderSlope > 8) score -= (shoulderSlope - 8) * 2;
+    if (neckAngle > 25) score -= (neckAngle - 25) * 1.2;
+    score = Math.max(0, Math.min(100, Math.round(score)));
+    postureScore = score;
+    totalFrames++;
+    if (score > 65) goodFrames++;
+
+    // UI updates
+    updateScore(score);
+    updateSpineGauges(spineAngle, shoulderSlope, neckAngle);
+    updateStats(score);
+
+    document.getElementById('spine-angle-disp').textContent = Math.round(spineAngle) + '°';
+    document.getElementById('shoulder-disp').textContent = Math.round(shoulderSlope) + '°';
+    document.getElementById('neck-disp').textContent = Math.round(neckAngle) + '°';
+
+    // Slouch detection
+    if (score < 50) {
+        slouchStreak++;
+        document.getElementById('app-content-blur').classList.add('slouching');
+        if (slouchStreak === 1) slouchCount++;
+        if (Date.now() - lastAlertTime > 8000) {
+            showToast('⚠️ Posture Alert', 'Slouching detected — sit up straight.');
+            lastAlertTime = Date.now();
+            alertCount++;
+            document.getElementById('notif-dot').style.display = 'block';
+        }
+        if (slouchStreak > 120 && !breakActive) triggerBreak();
+    } else {
+        slouchStreak = 0;
+        document.getElementById('app-content-blur').classList.remove('slouching');
+    }
+
+    // Update status badge
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    statusDot.className = 'status-dot';
+    if (score > 70) {
+        statusDot.classList.add('green');
+        statusText.textContent = 'Great Posture';
+    } else if (score > 45) {
+        statusDot.classList.add('yellow');
+        statusText.textContent = 'Minor Adjustments';
+    } else {
+        statusDot.classList.add('red');
+        statusText.textContent = 'Poor Posture';
+    }
+}
+
+function updateScore(score) {
+    const color = score > 70 ? 'var(--green)' : score > 45 ? 'var(--amber)' : 'var(--red)';
+    const label = score > 85 ? 'Excellent' : score > 70 ? 'Good' : score > 50 ? 'Fair' : score > 30 ? 'Poor' : 'Critical';
+    const desc  = score > 70 ? 'Your spine alignment looks good. Keep it up!' : score > 45 ? 'Minor adjustments needed — roll your shoulders back.' : 'Significant slouching detected. Please sit up and reset.';
+
+    document.getElementById('score-main').textContent = score;
+    document.getElementById('score-sm').textContent   = score;
+    document.getElementById('stat-score').textContent = score;
+    document.getElementById('score-label').textContent = label;
+    document.getElementById('score-desc').textContent  = desc;
+    document.getElementById('score-trend').textContent = label;
+
+    const dash = 201;
+    const offset = dash - (score / 100) * dash;
+    document.getElementById('score-ring-main').style.strokeDashoffset = offset;
+    document.getElementById('score-ring-main').style.stroke = color;
+    document.getElementById('stat-score').style.color = color;
+
+    const sdash = 150.8;
+    const soffset = sdash - (score / 100) * sdash;
+    document.getElementById('score-ring-small').style.strokeDashoffset = soffset;
+    document.getElementById('score-ring-small').style.stroke = color;
+
+    document.getElementById('stat-score-bar').style.width = score + '%';
+    document.getElementById('stat-score-bar').style.background = color;
+}
+
+function updateSpineGauges(spine, shoulder, neck) {
+    const cervPct = Math.min(100, (neck / 45) * 100);
+    const thorPct = Math.min(100, ((180 - spine) / 60) * 100);
+    const lumbPct = Math.min(100, (shoulder / 20) * 100);
+
+    const toColor = pct => pct < 40 ? 'var(--green)' : pct < 70 ? 'var(--amber)' : 'var(--red)';
+
+    document.getElementById('sp-cerv').textContent = Math.round(neck) + '°';
+    document.getElementById('sp-thor').textContent = Math.round(spine) + '°';
+    document.getElementById('sp-lumb').textContent = Math.round(shoulder) + '°';
+
+    document.getElementById('sp-cerv-bar').style.cssText = `width:${cervPct}%;background:${toColor(cervPct)}`;
+    document.getElementById('sp-thor-bar').style.cssText = `width:${thorPct}%;background:${toColor(thorPct)}`;
+    document.getElementById('sp-lumb-bar').style.cssText = `width:${lumbPct}%;background:${toColor(lumbPct)}`;
+}
+
+function updateStats(score) {
+    const goodPct = totalFrames > 0 ? Math.round((goodFrames/totalFrames)*100) : 0;
+    document.getElementById('stat-good').textContent = goodPct + '%';
+    document.getElementById('stat-good-bar').style.width = goodPct + '%';
+    document.getElementById('stat-alerts').textContent = alertCount;
+    document.getElementById('stat-alerts-bar').style.width = Math.min(100, alertCount * 10) + '%';
+    document.getElementById('stat-slouch').textContent = slouchCount;
+    document.getElementById('stat-slouch-bar').style.width = Math.min(100, slouchCount * 10) + '%';
+}
+
+function initPose() {
+    pose = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
+    pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, enableSegmentation: false, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+    pose.onResults(onResults);
+
+    const video = document.getElementById('webcam');
+    camera = new Camera(video, {
+        onFrame: async () => { await pose.send({ image: video }); },
+        width: 1280, height: 720
+    });
+    camera.start().then(() => {
+        addAlert('good', '📷', 'Camera Connected', 'Pose engine initialized successfully.');
+    }).catch(err => {
+        addAlert('bad', '❌', 'Camera Error', err.message || 'Could not access webcam.');
+        document.getElementById('status-text').textContent = 'Camera Error';
+        document.getElementById('status-dot').className = 'status-dot red';
+    });
+}
+
+// ─────────────────────────────────────────────
+//  ALERT FEED
+// ─────────────────────────────────────────────
+let alertThrottles = {};
+function addAlert(type, icon, title, msg) {
+    const feed = document.getElementById('alerts-feed');
+    const el = document.createElement('div');
+    el.className = `alert-item ${type}`;
+    const now = new Date();
+    const t = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    el.innerHTML = `<div class="alert-icon">${icon}</div><div class="alert-text"><h5>${title}</h5><p>${msg}</p><div class="alert-time">${t}</div></div>`;
+    feed.prepend(el);
+    if (feed.children.length > 30) feed.removeChild(feed.lastChild);
+}
+
+// ─────────────────────────────────────────────
+//  TOAST
+// ─────────────────────────────────────────────
+let toastTimeout;
+function showToast(title, msg) {
+    const t = document.getElementById('toast');
+    document.getElementById('toast-title').textContent = title;
+    document.getElementById('toast-msg').textContent   = msg;
+    t.classList.add('show');
+    addAlert('warn', '⚠️', title, msg);
+    clearTimeout(toastTimeout);
+    toastTimeout = setTimeout(() => t.classList.remove('show'), 5000);
+}
+
+// ─────────────────────────────────────────────
+//  BREAK OVERLAY
+// ─────────────────────────────────────────────
+let breakTimerInt;
+function triggerBreak() {
+    breakActive = true;
+    slouchStreak = 0;
+    const overlay = document.getElementById('break-overlay');
+    overlay.classList.add('active');
+    addAlert('bad', '🧘', 'Break Triggered', 'Prolonged poor posture detected. Take a stretch.');
+    let t = 30;
+    const ring = document.getElementById('break-ring');
+    const timerEl = document.getElementById('break-timer');
+    const c = 314;
+    document.getElementById('str-1').className = 'stretch-item';
+    document.getElementById('str-2').className = 'stretch-item';
+    document.getElementById('str-3').className = 'stretch-item';
+    clearInterval(breakTimerInt);
+    breakTimerInt = setInterval(() => {
+        t--;
+        timerEl.textContent = t;
+        ring.style.strokeDashoffset = (t / 30) * c;
+        if (t <= 20) document.getElementById('str-1').className = 'stretch-item done';
+        if (t <= 12) document.getElementById('str-2').className = 'stretch-item done';
+        if (t <= 4)  document.getElementById('str-3').className = 'stretch-item done';
+        if (t <= 0) dismissBreak();
+    }, 1000);
+}
+
+function dismissBreak() {
+    clearInterval(breakTimerInt);
+    document.getElementById('break-overlay').classList.remove('active');
+    document.getElementById('app-content-blur').classList.remove('slouching');
+    addAlert('good', '✅', 'Break Complete', 'Session resumed. Keep your posture in check!');
+    breakActive = false;
+    slouchStreak = 0;
+}
+
+// Nav pills (demo)
+document.querySelectorAll('.nav-pill').forEach(pill => {
+    pill.addEventListener('click', function() {
+        document.querySelectorAll('.nav-pill').forEach(p => p.classList.remove('active'));
+        this.classList.add('active');
+    });
+});
+</script>
+</body>
+</html>
